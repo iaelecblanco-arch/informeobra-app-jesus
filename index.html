@@ -6,6 +6,17 @@
 <title>InformeObra</title>
 <style>
 :root{--bg:#f3f4f6;--surface:#fff;--surface2:#f9fafb;--border:#e5e7eb;--accent:#2563eb;--accent2:#1d4ed8;--text:#111827;--text2:#4b5563;--text3:#9ca3af;--danger:#ef4444;--r:10px;--r2:14px}
+[data-theme="dark"]{--bg:#0f172a;--surface:#1e293b;--surface2:#273549;--border:#334155;--accent:#3b82f6;--accent2:#2563eb;--text:#f1f5f9;--text2:#94a3b8;--text3:#64748b;--danger:#f87171}
+[data-theme="dark"] .topbar,[data-theme="dark"] .sidebar,[data-theme="dark"] .obra-item,[data-theme="dark"] .card,[data-theme="dark"] .modal,[data-theme="dark"] .foto-card,[data-theme="dark"] .pdf-card,[data-theme="dark"] .editor-topbar,[data-theme="dark"] .tab-bar{background:var(--surface);border-color:var(--border)}
+[data-theme="dark"] .field input,[data-theme="dark"] .field textarea,[data-theme="dark"] .field select,[data-theme="dark"] .check-row input[type=text],[data-theme="dark"] .foto-body textarea{background:var(--surface2);color:var(--text);border-color:var(--border)}
+[data-theme="dark"] .btn-ghost{background:var(--surface2);border-color:var(--border);color:var(--text)}
+[data-theme="dark"] .icon-btn{background:var(--surface2);border-color:var(--border);color:var(--text)}
+[data-theme="dark"] body{background:var(--bg);color:var(--text)}
+[data-theme="dark"] .content,[data-theme="dark"] .content-scroll{background:var(--bg)}
+[data-theme="dark"] .tab.active{background:var(--bg);border-color:var(--border);color:var(--text)}
+[data-theme="dark"] .inf-item-wrap > div{background:var(--surface)!important}
+[data-theme="dark"] .add-media-btn{border-color:var(--text3);color:var(--text2)}
+[data-theme="dark"] .tarea-row input[type=text],[data-theme="dark"] .fcheck-item input[type=text]{background:var(--surface2);color:var(--text)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{height:100%}
 body{height:100%;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;display:flex;flex-direction:column}
@@ -227,6 +238,7 @@ body{height:100%;font-family:Arial,sans-serif;background:var(--bg);color:var(--t
   <div style="display:flex;gap:.45rem;align-items:center">
     <span id="ghStatus" style="font-size:.7rem;color:var(--text3);display:none">☁️</span>
     <button class="btn btn-ghost btn-sm" onclick="abrirAcceso()">👤 <span id="lblUser">Acceder</span></button>
+    <button class="icon-btn" onclick="toggleDarkMode()" id="btnDark" title="Modo oscuro">🌙</button>
     <button class="icon-btn" onclick="irInicio()">🏗</button>
   </div>
 </div>
@@ -238,6 +250,10 @@ body{height:100%;font-family:Arial,sans-serif;background:var(--bg);color:var(--t
     <div class="sidebar-head">
       <span style="font-size:.78rem;font-weight:700;text-transform:uppercase;color:var(--text2)">Obras</span>
       <button class="icon-btn accent" onclick="openModal('mObra')">＋</button>
+    </div>
+    <div style="padding:.4rem .5rem;border-bottom:1px solid var(--border)">
+      <input id="obraSearch" type="search" placeholder="🔍 Buscar obra…" oninput="renderSidebar()"
+        style="width:100%;padding:.4rem .7rem;border:1.5px solid var(--border);border-radius:var(--r);font-family:Arial;font-size:.8rem;outline:none;background:var(--surface2);color:var(--text)">
     </div>
     <div class="sidebar-body" id="sidebarList"></div>
   </aside>
@@ -378,6 +394,14 @@ body{height:100%;font-family:Arial,sans-serif;background:var(--bg);color:var(--t
       <div style="display:flex;gap:.5rem;margin-top:1rem">
         <button class="btn btn-primary" style="flex:1" onclick="registrarTecnico()">Crear</button>
         <button class="btn btn-ghost" onclick="closeModal('mAcceso')">Cerrar</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:.75rem;margin-top:.75rem">
+      <div class="modal-sub" style="margin-bottom:.6rem">Copia de seguridad</div>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="exportarDatos()">⬇ Exportar</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="$('importFile').click()">⬆ Importar</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importarDatos(event)">
       </div>
     </div>
   </div>
@@ -820,6 +844,7 @@ function openInforme(id){
   $('fNum').value=inf.num||'';$('fAsunto').value=inf.asunto||'';$('fFecha').value=today();
   $('fAutor').value=inf.autor||(curTec?curTec.nombre:'');$('fDetalles').value=inf.detalles||'';
   $('fDirigido').value=inf.dirigido||'';$('fFechaEjec').value=inf.fechaEjec||'';
+  if($('fEstado'))$('fEstado').value=inf.estado||'borrador';
   $('tareasContainer').innerHTML='';(inf.tareas||[]).forEach(t=>addTarea(t));
   photoMap={};$('fotosContainer').innerHTML='';
   (inf.fotos||[]).forEach(f=>{if(f.src)photoMap[f.id]=f.src;appendFotoCard(f)});
@@ -849,7 +874,8 @@ function guardar(){
   const pdfs=Array.from(document.querySelectorAll('[data-pid]')).map(w=>{
     const pid=w.dataset.pid;return{id:pid,titulo:$('ptitle-'+pid)?.value||'',desc:$('pdesc-'+pid)?.value||'',src:photoMap[pid]||null};
   });
-  informes[idx]={...informes[idx],num:$('fNum').value,asunto:$('fAsunto').value,fecha:$('fFecha').value,autor:$('fAutor').value,detalles:$('fDetalles').value,dirigido:$('fDirigido').value,fechaEjec:$('fFechaEjec').value,tareas,fotos,pdfs};
+  const estado=$('fEstado')?$('fEstado').value:'borrador';
+  informes[idx]={...informes[idx],num:$('fNum').value,asunto:$('fAsunto').value,fecha:$('fFecha').value,autor:$('fAutor').value,detalles:$('fDetalles').value,dirigido:$('fDirigido').value,fechaEjec:$('fFechaEjec').value,estado,tareas,fotos,pdfs};
   saveAll();isDirty=false;$('saveBar').classList.remove('show');$('editorTitle').textContent=informes[idx].num;toast('✓ Guardado');
 }
 
@@ -1382,6 +1408,66 @@ updateUserUI();
 
 </script>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js no disponible')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js no disponible')">
+// ── MODO OSCURO ──────────────────────────────────────────────────
+function toggleDarkMode(){
+  const dark=document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme',dark?'light':'dark');
+  $('btnDark').textContent=dark?'🌙':'☀️';
+  try{localStorage.setItem('io_theme',dark?'light':'dark')}catch(e){}
+}
+(function initTheme(){
+  try{const t=localStorage.getItem('io_theme');if(t){document.documentElement.setAttribute('data-theme',t);if(t==='dark'&&$('btnDark'))$('btnDark').textContent='☀️'}}catch(e){}
+})();
+
+// ── DUPLICAR INFORME ─────────────────────────────────────────────
+function duplicarInforme(id){
+  const orig=informes.find(i=>i.id===id);if(!orig)return;
+  const misInformes=informes.filter(i=>i.obraId===orig.obraId);
+  const nextNum=misInformes.length+1;
+  const numFormatted=`inf-${String(nextNum).padStart(3,'0')}`;
+  const copia=JSON.parse(JSON.stringify(orig));
+  copia.id=uid();copia.num=numFormatted;copia.fecha=today();
+  copia.fav=false;copia.term=false;
+  // Nuevos IDs para fotos y pdfs
+  const idMap={};
+  (copia.fotos||[]).forEach(f=>{const nid=uid();idMap[f.id]=nid;f.id=nid;});
+  (copia.pdfs||[]).forEach(p=>{const nid=uid();idMap[p.id]=nid;p.id=nid;});
+  informes.push(copia);
+  saveAll();renderInformes();toast('✓ Informe duplicado');
+}
+
+// ── ESTADO INFORME — guardar/cargar ─────────────────────────────
+const estadoLabels={borrador:'📝 Borrador',enviado:'📤 Enviado',aprobado:'✅ Aprobado'};
+
+// ── EXPORTAR / IMPORTAR ──────────────────────────────────────────
+function exportarDatos(){
+  const datos={obras,informes,tecnicos,exportado:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(datos,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`InformeObra_backup_${today()}.json`;
+  a.click();URL.revokeObjectURL(a.href);
+  toast('✓ Backup exportado');
+}
+function importarDatos(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const datos=JSON.parse(ev.target.result);
+      if(!datos.obras||!datos.informes){toast('⚠️ Fichero inválido');return;}
+      if(!confirm(`¿Importar backup del ${datos.exportado?new Date(datos.exportado).toLocaleDateString():'fichero'}? Se sobrescribirán los datos actuales.`))return;
+      obras=datos.obras||[];informes=datos.informes||[];tecnicos=datos.tecnicos||[];
+      saveAll();closeModal('mAcceso');renderSidebar();updateUserUI();
+      if(obras.length){curObraId=obras[0].id;openObra(curObraId)}else showView('vWelcome');
+      toast('✓ Datos importados correctamente');
+    }catch(err){toast('⚠️ Error al leer el fichero');}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+</script>
 </body>
 </html>
