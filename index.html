@@ -584,7 +584,8 @@ async function ghCargar(){
     } else if(r.ok){
       const meta = await r.json();
       ghFileSha = meta.sha;
-      const contenido = JSON.parse(atob(meta.content.replace(/\n/g,'')));
+      const raw = atob(meta.content.replace(/\n/g,''));
+      const contenido = raw.trim() ? JSON.parse(raw) : {};
       obras    = contenido.obras    || [];
       informes = contenido.informes || [];
       tecnicos = contenido.tecnicos || [];
