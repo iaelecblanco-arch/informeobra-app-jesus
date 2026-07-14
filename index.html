@@ -272,6 +272,9 @@ body{height:100%;font-family:Arial,sans-serif;background:var(--bg);color:var(--t
           </div>
           <div style="display:flex;gap:.4rem;flex-wrap:wrap">
             <button class="btn btn-ghost btn-sm" onclick="editarObra()">✏️ Editar</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportarObra()">⬇️ Exportar obra</button>
+            <button class="btn btn-ghost btn-sm" onclick="$('importObraFile').click()">⬆️ Importar obra</button>
+            <input type="file" id="importObraFile" accept=".json" style="display:none" onchange="importarObra(event)">
             <button class="btn btn-primary btn-sm" onclick="crearInforme()">＋ Nuevo informe</button>
           </div>
         </div>
@@ -291,6 +294,9 @@ body{height:100%;font-family:Arial,sans-serif;background:var(--bg);color:var(--t
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="switchTab('preview')">📄 Vista A4</button>
           <button class="btn btn-primary btn-sm" onclick="openModal('mCompartir')">📥 Generar PDF</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportarInforme()">⬇️ Exportar</button>
+          <button class="btn btn-ghost btn-sm" onclick="$('importInformeFile').click()">⬆️ Importar</button>
+          <input type="file" id="importInformeFile" accept=".json" style="display:none" onchange="importarInforme(event)">
           <button class="btn btn-ghost btn-sm" onclick="guardar()">💾 Guardar</button>
         </div>
       </div>
@@ -1603,6 +1609,156 @@ function cerrarEditor(apply){
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js no disponible')"></script>
 
 <script>
+
+
+// ── EXPORTAR OBRA COMPLETA ───────────────────────────────────────────────────
+function exportarObra(){
+  if(!curObraId){toast('⚠️ Abre una obra primero');return;}
+  const obra = obras.find(o=>o.id===curObraId);
+  if(!obra){toast('⚠️ Obra no encontrada');return;}
+  const misInformes = informes.filter(i=>i.obraId===curObraId);
+  // Clonar informes con fotos embebidas
+  const informesConFotos = misInformes.map(inf=>{
+    const clon = JSON.parse(JSON.stringify(inf));
+    (clon.fotos||[]).forEach(f=>{ if(!f.src) f.src = photoMap[f.id]||null; });
+    (clon.pdfs||[]).forEach(p=>{ if(!p.src) p.src = photoMap[p.id]||null; });
+    return clon;
+  });
+  const paquete = {
+    version: 1,
+    tipo: 'obra',
+    exportado: new Date().toISOString(),
+    obra: JSON.parse(JSON.stringify(obra)),
+    informes: informesConFotos
+  };
+  const blob = new Blob([JSON.stringify(paquete,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `obra_${obra.id}_${today()}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast(`✓ Obra exportada (${informesConFotos.length} informes)`);
+}
+
+// ── IMPORTAR OBRA COMPLETA ───────────────────────────────────────────────────
+function importarObra(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const paquete = JSON.parse(ev.target.result);
+      if(!paquete.obra || paquete.tipo !== 'obra' || paquete.version !== 1){
+        toast('⚠️ Fichero inválido o no es una obra');return;
+      }
+      const obraImport = paquete.obra;
+      const informesImport = paquete.informes || [];
+      const obraExistente = obras.find(o=>o.id===obraImport.id);
+
+      const doImport = (idFinal) => {
+        obraImport.id = idFinal;
+        // Añadir obra si no existe con ese idFinal
+        if(!obras.find(o=>o.id===idFinal)) obras.push(obraImport);
+        // Importar informes
+        informesImport.forEach(inf=>{
+          // Cargar fotos al photoMap
+          (inf.fotos||[]).forEach(f=>{ if(f.src){photoMap[f.id]=f.src; delete f.src;} });
+          (inf.pdfs||[]).forEach(p=>{ if(p.src){photoMap[p.id]=p.src; delete p.src;} });
+          inf.obraId = idFinal;
+          // Si ya existe informe con mismo num en esta obra, nuevo ID
+          const existe = informes.find(i=>i.obraId===idFinal && i.num===inf.num);
+          if(existe) inf.id = uid();
+          informes.push(inf);
+        });
+        saveAll(); renderSidebar();
+        curObraId = idFinal; openObra(idFinal);
+        toast(`✓ Obra importada con ${informesImport.length} informes`);
+      };
+
+      if(obraExistente){
+        const resp = confirm(
+          `Ya existe una obra con ID "${obraImport.id}" (${obraExistente.cliente} · ${obraExistente.nombre}).
+
+` +
+          `• Aceptar → Importar como nueva obra con ID automático
+` +
+          `• Cancelar → Cancelar importación`
+        );
+        if(resp) doImport(uid());
+      } else {
+        doImport(obraImport.id);
+      }
+    }catch(err){toast('⚠️ Error al leer el fichero: '+err.message);}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+// ── EXPORTAR INFORME INDIVIDUAL ─────────────────────────────────────────────
+function exportarInforme(){
+  if(!curInfId){toast('⚠️ Abre un informe primero');return;}
+  const inf = informes.find(i=>i.id===curInfId);
+  if(!inf){toast('⚠️ Informe no encontrado');return;}
+  const obra = obras.find(o=>o.id===curObraId)||{};
+  // Incluir fotos y PDFs con su src (base64) embebido
+  const infConFotos = JSON.parse(JSON.stringify(inf));
+  (infConFotos.fotos||[]).forEach(f=>{ if(!f.src) f.src = photoMap[f.id]||null; });
+  (infConFotos.pdfs||[]).forEach(p=>{ if(!p.src) p.src = photoMap[p.id]||null; });
+  const paquete = {
+    version: 1,
+    exportado: new Date().toISOString(),
+    obra: {id:obra.id, cliente:obra.cliente, nombre:obra.nombre},
+    informe: infConFotos
+  };
+  const blob = new Blob([JSON.stringify(paquete,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `informe_${inf.num||inf.id}_${today()}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('✓ Informe exportado');
+}
+
+// ── IMPORTAR INFORME INDIVIDUAL ──────────────────────────────────────────────
+function importarInforme(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const paquete = JSON.parse(ev.target.result);
+      if(!paquete.informe || paquete.version !== 1){toast('⚠️ Fichero inválido');return;}
+      const inf = paquete.informe;
+      // Cargar fotos al photoMap
+      (inf.fotos||[]).forEach(f=>{ if(f.src){photoMap[f.id]=f.src;} });
+      (inf.pdfs||[]).forEach(p=>{ if(p.src){photoMap[p.id]=p.src;} });
+      // Limpiar src del objeto (se guarda en photoMap, no en el informe)
+      (inf.fotos||[]).forEach(f=>delete f.src);
+      (inf.pdfs||[]).forEach(p=>delete p.src);
+      // Comprobar si ya existe un informe con el mismo num/id
+      const existe = informes.find(i=>i.obraId===curObraId && i.num===inf.num);
+      const doImport = (nuevoId) => {
+        inf.id = nuevoId || uid();
+        inf.obraId = curObraId;
+        informes.push(inf);
+        saveAll(); renderInformes();
+        toast(`✓ Informe ${inf.num} importado`);
+      };
+      if(existe){
+        const resp = confirm(
+          `Ya existe un informe con ID "${inf.num}" en esta obra.
+
+` +
+          `• Aceptar → Añadir como copia con nuevo ID
+` +
+          `• Cancelar → Cancelar importación`
+        );
+        if(resp) doImport();
+      } else {
+        doImport(inf.id);
+      }
+    }catch(err){toast('⚠️ Error al leer el fichero: '+err.message);}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
 // ── DUPLICAR INFORME ─────────────────────────────────────────────
 function duplicarInforme(id){
   const orig=informes.find(i=>i.id===id);if(!orig)return;
